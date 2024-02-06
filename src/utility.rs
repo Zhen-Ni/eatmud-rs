@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 const DAYS_PER_YEAR: f64 = 360.;
 
 pub enum SIDE {
@@ -27,15 +28,13 @@ pub(crate) fn search_sorted<T, U: Ord>(
     let (mut lo, mut hi) = (0, a.len() - 1);
     while lo + 1 < hi {
         let mid = (lo + hi) / 2;
-        if key(&a[mid]) < *v {
-            lo = mid;
-        } else if *v < key(&a[mid]) {
-            hi = mid;
-        } else {
-            match side {
+        match key(&a[mid]).cmp(v) {
+            Ordering::Less => lo = mid,
+            Ordering::Greater => hi = mid,
+            Ordering::Equal => match side {
                 SIDE::LEFT => hi = mid,
                 SIDE::RIGHT => lo = mid,
-            }
+            },
         }
     }
     let lv = key(&a[lo]);
@@ -61,18 +60,21 @@ pub(crate) fn search_sorted<T, U: Ord>(
         }
     }
     // if v not in a
-    else {
-        if *v < lv {
-            lo
-        } else if *v > rv {
-            hi + 1
-        } else {
-            hi
-        }
+    else if *v < lv {
+        lo
+    } else if *v > rv {
+        hi + 1
+    } else {
+        hi
     }
 }
 
-pub(crate) fn iir(days_array: &[f64], investment_array: &[f64], end_value: f64, x0: f64) -> Option<f64> {
+pub(crate) fn irr(
+    days_array: &[f64],
+    investment_array: &[f64],
+    end_value: f64,
+    x0: f64,
+) -> Option<f64> {
     let f = |p: f64| -> f64 {
         end_value
             - days_array
@@ -88,7 +90,7 @@ pub(crate) fn iir(days_array: &[f64], investment_array: &[f64], end_value: f64, 
             .map(|(&t, &x)| -x * t / DAYS_PER_YEAR * f64::powf(1. + p, t / DAYS_PER_YEAR - 1.))
             .sum()
     };
-    newton1d(f, g, x0, 1e-5, 1000)
+    newton1d(f, g, x0, 1e-6, 1000)
 }
 
 /// Find root of function using Newton's method.
@@ -159,12 +161,12 @@ mod test {
     }
 
     #[test]
-    fn test_iir() {
+    fn test_irr() {
         let days_array = [720., 360., 0.];
         let investment_array = [1., 2., 0.];
         let end_value = 8.;
         let x0 = 0.0;
-        let res = iir(&days_array, &investment_array, end_value, x0).unwrap();
+        let res = irr(&days_array, &investment_array, end_value, x0).unwrap();
         assert!((res - 1.).abs() < 1e-2);
     }
 }

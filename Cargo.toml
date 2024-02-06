@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 chrono = "*"
 encoding_rs = "*"
+ndarray = "*"
+
+[lib]
+crate_type = ["lib"]

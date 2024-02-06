@@ -1,12 +1,5 @@
-// use std::ops::RangeBounds;
-
-// use chrono::NaiveDate;
-// use eatmud::Fund;
-
+use eatmud;
 
 fn main() {
-    let a = 1..5;
-    // let c = 1..=5;
-    // let b = ..6;
-    a.start;
+    let _ = eatmud::read_gta("hs300.txt");
 }

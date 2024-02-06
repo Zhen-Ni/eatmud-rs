@@ -47,8 +47,8 @@ impl DataSlice for StockSlice {
 
 #[derive(Debug)]
 pub struct Data<Ds: DataSlice> {
-    name: String,
-    code: String,
+    pub name: String,
+    pub code: String,
     data: Vec<Ds>,
 }
 
@@ -86,6 +86,9 @@ impl<Ds: DataSlice> Data<Ds> {
     }
     pub fn len(&self) -> usize {
         self.data.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 }
 
@@ -181,7 +184,7 @@ pub fn read_gta(path: &str) -> Option<Stock> {
         return None;
     };
     let code = &code.to_string()[1..code.len() - 1];
-    let mut stock = Data::<StockSlice>::new(name, &code);
+    let mut stock = Data::<StockSlice>::new(name, code);
 
     while let Ok(size) = reader.read_until(b'\n', &mut buffer) {
         if size == 0 {
@@ -194,30 +197,26 @@ pub fn read_gta(path: &str) -> Option<Stock> {
         if words.len() < 6 {
             continue;
         }
-        match words.as_slice()[..6] {
-            [date, open, high, low, close, volume] => {
-                let Ok(date): Result<NaiveDate, _> = NaiveDate::parse_from_str(&date, "%Y/%m/%d")
-                else {
-                    continue;
-                };
-                let Ok(open): Result<f64, _> = open.parse() else {
-                    continue;
-                };
-                let Ok(high): Result<f64, _> = high.parse() else {
-                    continue;
-                };
-                let Ok(low): Result<f64, _> = low.parse() else {
-                    continue;
-                };
-                let Ok(close): Result<f64, _> = close.parse() else {
-                    continue;
-                };
-                let Ok(volume): Result<f64, _> = volume.parse() else {
-                    continue;
-                };
-                stock.append(date, open, high, low, close, volume);
-            }
-            _ => {}
+        if let [date, open, high, low, close, volume] = words.as_slice()[..6] {
+            let Ok(date): Result<NaiveDate, _> = NaiveDate::parse_from_str(date, "%Y/%m/%d") else {
+                continue;
+            };
+            let Ok(open): Result<f64, _> = open.parse() else {
+                continue;
+            };
+            let Ok(high): Result<f64, _> = high.parse() else {
+                continue;
+            };
+            let Ok(low): Result<f64, _> = low.parse() else {
+                continue;
+            };
+            let Ok(close): Result<f64, _> = close.parse() else {
+                continue;
+            };
+            let Ok(volume): Result<f64, _> = volume.parse() else {
+                continue;
+            };
+            stock.append(date, open, high, low, close, volume);
         }
     }
     Some(stock)
@@ -235,7 +234,7 @@ mod test {
         let stock = read_gta(filename).expect("failed to read file");
         let mut fund = Fund::from(&stock);
         let n = fund.len();
-        assert!(fund[n - 1].value() == 3347.45);
+        assert!(fund[0].value() == 982.79);
         let date = NaiveDate::parse_from_str("2024-01-01", "%Y-%m-%d").unwrap();
         fund.append(date, 2.0);
         assert!(fund[n].date == date);
