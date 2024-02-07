@@ -4,7 +4,7 @@ pub mod record;
 pub mod utility;
 pub mod transaction;
 
-pub use chrono::NaiveDate;
+pub use chrono::{NaiveDate, Duration};
 pub use prelude::*;
 pub use data::{Fund, Stock, read_gta};
 pub use record::{ConciseRecord, DetailedRecord};

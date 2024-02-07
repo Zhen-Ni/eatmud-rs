@@ -234,11 +234,12 @@ mod test {
         let stock = read_gta(filename).expect("failed to read file");
         let mut fund = Fund::from(&stock);
         let n = fund.len();
-        assert!(fund[0].value() == 982.79);
+        assert_eq!(fund[0].value(), 982.79);
+        assert_eq!(fund.code(), "000300");
         let date = NaiveDate::parse_from_str("2024-01-01", "%Y-%m-%d").unwrap();
         fund.append(date, 2.0);
-        assert!(fund[n].date == date);
-        assert!(fund[n].value == 2.0);
+        assert_eq!(fund[n].date, date);
+        assert_eq!(fund[n].value, 2.0);
     }
 
     #[test]
@@ -248,8 +249,8 @@ mod test {
 
         stock.append(date, 150.66, 151.37, 148.51, 154.82, 10000.);
         stock.append(date + Days::new(1), 157.34, 159.87, 148.51, 153.45, 9754.);
-        assert!(stock.len() == 2);
-        assert!(stock[0].date() == date);
-        assert!(stock[0].value() == 154.82);
+        assert_eq!(stock.len(), 2);
+        assert_eq!(stock[0].date(), date);
+        assert_eq!(stock[0].value(), 154.82);
     }
 }
