@@ -15,26 +15,44 @@ pub trait RecordSlice {
 
 #[derive(Debug, Clone)]
 pub struct ConciseRecordSlice {
-    pub date: NaiveDate,
-    pub investment: f64,
-    pub present_value: f64,
-    pub comment: String,
-    pub total_investment: f64,
-    pub profit: f64,
+    date: NaiveDate,
+    investment: f64,
+    present_value: f64,
+    comment: String,
+    total_investment: f64,
+    profit: f64,
 }
 
 #[derive(Debug, Clone)]
 pub struct DetailedRecordSlice {
-    pub date: NaiveDate,
-    pub investment: f64,
-    pub nav: f64,
-    pub share: f64,
-    pub comment: String,
-    pub fee: f64,
-    pub total_investment: f64,
-    pub total_share: f64,
-    pub present_value: f64,
-    pub profit: f64,
+    date: NaiveDate,
+    investment: f64,
+    nav: f64,
+    share: f64,
+    comment: String,
+    fee: f64,
+    total_investment: f64,
+    total_share: f64,
+    present_value: f64,
+    profit: f64,
+}
+
+impl DetailedRecordSlice {
+    pub fn nav(&self) -> f64 {
+        self.nav
+    }
+
+    pub fn share(&self) -> f64 {
+        self.share
+    }
+
+    pub fn fee(&self) -> f64 {
+        self.fee
+    }
+
+    pub fn total_share(&self) -> f64 {
+        self.total_share
+    }
 }
 
 impl RecordSlice for ConciseRecordSlice {
