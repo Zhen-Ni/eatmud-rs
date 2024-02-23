@@ -15,7 +15,7 @@ fn bench_aip(start_date: &str, end_date: &str) {
     let gz2000 = Fund::from(&read_gta("gz2000.txt").unwrap());
     let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d").unwrap();
     let end_date = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").unwrap();
-    let trans = Transaction::new(&[hs300, gz2000], Some(start_date), Some(end_date));
+    let trans = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
 
     let now = Instant::now();
     let mut res: Vec<f64> = Vec::new();
@@ -53,7 +53,7 @@ fn aip(trans: &Transaction, day: u32) -> f64 {
         it.buy(0, 1000., 2.);
         it.buy(1, 1000., 2.);
     }
-    it.present_assert() / inflow
+    it.present_asset() / inflow
 }
 
 fn aip_rec(trans: &Transaction, day: u32) -> f64 {

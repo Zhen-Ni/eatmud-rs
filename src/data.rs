@@ -246,7 +246,6 @@ mod test {
     fn test_stock() {
         let mut stock = Stock::new("ndsd", "SZ300750");
         let date = NaiveDate::parse_from_str("2024-01-11", "%Y-%m-%d").unwrap();
-
         stock.append(date, 150.66, 151.37, 148.51, 154.82, 10000.);
         stock.append(date + Days::new(1), 157.34, 159.87, 148.51, 153.45, 9754.);
         assert_eq!(stock.len(), 2);
@@ -254,3 +253,4 @@ mod test {
         assert_eq!(stock[0].value(), 154.82);
     }
 }
+

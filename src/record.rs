@@ -196,7 +196,7 @@ impl<Rs: RecordSlice> Record<Rs> {
                 .iter()
                 .map(|rs| rs.investment()),
         );
-        irr(&t, &x, end_value, x0).unwrap()
+        irr(&t, &x, end_value, x0).expect("fail to solve irr")
     }
 
     /// Calculate internal rate of return with default parameters.
@@ -449,7 +449,7 @@ impl fmt::Display for DetailedRecord {
 #[macro_export]
 macro_rules! merge_records {
     ($record: expr) => {
-        merge_records!($record, ConcisedRecord::new("", ""))
+        merge_records!($record, ConciseRecord::new("", ""))
     };
     ($record1: expr, $record2: expr) => {{
         use $crate::record::RecordSlice;
@@ -510,7 +510,6 @@ macro_rules! merge_records {
     ($r1: expr, $r2: expr, $($rs: expr), +) => {
         merge_records!(merge_records!(r1, r2), $($rs), +)
     }
-
 }
 
 #[cfg(test)]
