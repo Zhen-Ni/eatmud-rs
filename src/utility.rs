@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-const DAYS_PER_YEAR: f64 = 360.;
+pub const DAYS_PER_YEAR: f64 = 360.;
 
 pub enum SIDE {
     LEFT,
@@ -24,6 +24,9 @@ pub(crate) fn search_sorted<T, U: Ord>(
     key: impl Fn(&T) -> U,
     side: Option<SIDE>,
 ) -> usize {
+    if a.len() == 0 {
+        return 0;
+    }
     let side = side.unwrap_or(SIDE::LEFT);
     let (mut lo, mut hi) = (0, a.len() - 1);
     while lo + 1 < hi {

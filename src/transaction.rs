@@ -4,6 +4,17 @@ use crate::{
 use chrono::{Datelike, Duration, NaiveDate};
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, AssignElem, Axis, ShapeBuilder};
 
+#[derive(Debug)]
+pub struct TransactionError(&'static str);
+
+impl std::fmt::Display for TransactionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "Transaction Error: {}", self.0)
+    }
+}
+
+impl std::error::Error for TransactionError {}
+
 pub struct Transaction {
     names: Vec<String>,
     codes: Vec<String>,
@@ -222,9 +233,11 @@ impl<'a> TransactionIterator<'a> {
     }
 
     #[inline]
-    fn assert_not_finished(&self) {
+    fn assert_not_finished(&self) -> Result<(), TransactionError> {
         if self.is_finished() {
-            panic!("transaction iteration reaches the end")
+            Err(TransactionError("transaction iteration reaches the end"))
+        } else {
+            Ok(())
         }
     }
 
@@ -259,6 +272,19 @@ impl<'a> TransactionIterator<'a> {
             self.iter_log.shares[[self.index() - 1, idx]]
         } else {
             self.iter_log.shares[[self.index(), idx]]
+        }
+    }
+
+    /// Asset of specfied fund id at the *beginning* of the day.
+    pub fn present_fund_asset(&self, idx: usize) -> f64 {
+        if self.index() == 0 {
+            0.
+        } else if self.is_finished() {
+            self.iter_log.shares[[self.index() - 1, idx]]
+                * self.transaction.navs()[[self.index() - 1, idx]]
+        } else {
+            self.iter_log.shares[[self.index(), idx]]
+                * self.transaction.navs()[[self.index() - 1, idx]]
         }
     }
 
@@ -303,30 +329,39 @@ impl<'a> TransactionIterator<'a> {
         asset + self.cash()
     }
 
-    pub fn inflow(&mut self, amount: f64) -> &mut Self {
-        self.assert_not_finished();
+    pub fn inflow(&mut self, amount: f64) -> Result<&mut Self, TransactionError> {
+        self.assert_not_finished()?;
         self.iter_buffer.cash += amount;
-        self
+        Ok(self)
     }
 
-    pub fn inflow_comment(&mut self, amount: f64, comment: &str) -> &mut Self {
-        self.inflow(amount);
+    pub fn inflow_comment(
+        &mut self,
+        amount: f64,
+        comment: &str,
+    ) -> Result<&mut Self, TransactionError> {
+        self.inflow(amount)?;
         if let Some(ref mut record) = self.record {
             if !record.cash_comment_buffer.is_empty() {
                 record.cash_comment_buffer.push_str("; ");
                 record.cash_comment_buffer.push_str(comment);
             }
         }
-        self
+        Ok(self)
     }
 
-    pub fn buy(&mut self, fundid: usize, investment: f64, fee: f64) -> &mut Self {
-        self.assert_not_finished();
+    pub fn buy(
+        &mut self,
+        fundid: usize,
+        investment: f64,
+        fee: f64,
+    ) -> Result<&mut Self, TransactionError> {
+        self.assert_not_finished()?;
         self.iter_buffer.share[fundid] +=
             (investment - fee) / self.transaction.navs[[self.index(), fundid]];
         self.iter_buffer.cash -= investment;
         self.iter_buffer.investment[fundid] += investment;
-        self
+        Ok(self)
     }
 
     pub fn buy_comment(
@@ -335,24 +370,29 @@ impl<'a> TransactionIterator<'a> {
         investment: f64,
         fee: f64,
         comment: &str,
-    ) -> &mut Self {
-        self.buy(fundid, investment, fee);
+    ) -> Result<&mut Self, TransactionError> {
+        self.buy(fundid, investment, fee)?;
         if let Some(ref mut record) = self.record {
             if !record.fund_comment_buffer[fundid].is_empty() {
                 record.fund_comment_buffer[fundid].push_str("; ");
                 record.fund_comment_buffer[fundid].push_str(comment);
             }
         }
-        self
+        Ok(self)
     }
 
-    pub fn sell(&mut self, fundid: usize, share: f64, fee: f64) -> &mut Self {
-        self.assert_not_finished();
+    pub fn sell(
+        &mut self,
+        fundid: usize,
+        share: f64,
+        fee: f64,
+    ) -> Result<&mut Self, TransactionError> {
+        self.assert_not_finished()?;
         let income = share * self.transaction.navs[[self.index(), fundid]] - fee;
         self.iter_buffer.share[fundid] -= share;
         self.iter_buffer.cash += income;
         self.iter_buffer.investment[fundid] += income;
-        self
+        Ok(self)
     }
 
     pub fn sell_comment(
@@ -361,15 +401,15 @@ impl<'a> TransactionIterator<'a> {
         share: f64,
         fee: f64,
         comment: &str,
-    ) -> &mut Self {
-        self.sell(fundid, share, fee);
+    ) -> Result<&mut Self, TransactionError> {
+        self.sell(fundid, share, fee)?;
         if let Some(ref mut record) = self.record {
             if !record.fund_comment_buffer[fundid].is_empty() {
                 record.fund_comment_buffer[fundid].push_str("; ");
                 record.fund_comment_buffer[fundid].push_str(comment);
             }
         }
-        self
+        Ok(self)
     }
 
     // This method is only called by `flush_and_step`.
@@ -429,8 +469,10 @@ impl<'a> TransactionIterator<'a> {
     }
 
     /// Return whether the iteration reaches the end.
-    fn flush_and_step(&mut self, n: usize) -> bool {
-        self.assert_not_finished();
+    fn flush_and_step(&mut self, n: usize) -> Option<()> {
+        if self.is_finished() {
+            return None;
+        }
         if n == 0 {
             eprintln!(
                 "Step to the same date is would refresh iter_buffer, which affects self.present_*."
@@ -438,15 +480,16 @@ impl<'a> TransactionIterator<'a> {
         }
         self.flush();
         self.step(n);
-        self.is_finished()
+        if self.is_finished() {
+            None
+        } else {
+            Some(())
+        }
     }
 
     pub fn next_day(&mut self) -> Option<&mut Self> {
-        if self.flush_and_step(1) {
-            None
-        } else {
-            Some(self)
-        }
+        self.flush_and_step(1)?;
+        Some(self)
     }
 
     pub fn next_weekday(&mut self, weekday: Option<Weekday>) -> Option<&mut Self> {
@@ -461,11 +504,8 @@ impl<'a> TransactionIterator<'a> {
                 break;
             }
         }
-        if self.flush_and_step(n) {
-            None
-        } else {
-            Some(self)
-        }
+        self.flush_and_step(n)?;
+        Some(self)
     }
 
     pub fn goto(&mut self, date: NaiveDate) -> Option<&mut Self> {
@@ -475,11 +515,8 @@ impl<'a> TransactionIterator<'a> {
             |d| *d,
             None,
         );
-        if self.flush_and_step(n) {
-            None
-        } else {
-            Some(self)
-        }
+        self.flush_and_step(n)?;
+        Some(self)
     }
 
     pub fn next_month(&mut self, day: Option<u32>) -> Option<&mut Self> {
@@ -499,11 +536,8 @@ impl<'a> TransactionIterator<'a> {
             |d| *d,
             None,
         ) + 1;
-        if self.flush_and_step(n) {
-            None
-        } else {
-            Some(self)
-        }
+        self.flush_and_step(n)?;
+        Some(self)
     }
 
     pub fn cash_record(&self) -> Option<&ConciseRecord> {
@@ -565,7 +599,7 @@ mod test {
         let mut it = t.iter();
         let mut idx = 0;
         while let Some(_) = it.next_day() {
-            it.inflow(1.0);
+            it.inflow(1.0).unwrap();
             assert!(it.present_cash() == idx as f64);
             assert!(it.present_asset() == idx as f64);
             idx += 1;
@@ -583,13 +617,13 @@ mod test {
         let end_date = NaiveDate::parse_from_str("2024-01-20", "%Y-%m-%d").unwrap();
         let t = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
         let mut it = t.iter();
-        it.inflow(100.);
+        it.inflow(100.).unwrap();
         assert_eq!(it.present_asset(), 0.);
         while let Some(_) = it.next_weekday(Some(Weekday::Wed)) {
             assert!(it.present_asset() > 90.);
             assert!(it.present_asset() < 110.);
-            it.buy(0, 10., 0.);
-            it.buy(1, 10., 0.);
+            it.buy(0, 10., 0.).unwrap();
+            it.buy(1, 10., 0.).unwrap();
         }
         assert!(it.present_cash() == 40.);
         assert!((it.present_share(0) - 0.009108).abs() < 1e-6);
@@ -605,11 +639,11 @@ mod test {
         let end_date = NaiveDate::parse_from_str("2024-01-22", "%Y-%m-%d").unwrap();
         let t = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
         let mut it = t.iter();
-        it.inflow(100.);
+        it.inflow(100.).unwrap();
         let nav = 7459.99;
         assert_eq!(it.present_asset(), 0.);
         while let Some(_) = it.next_month(Some(28)) {
-            it.buy(1, 100., 0.1);
+            it.buy(1, 100., 0.1).unwrap();
         }
         assert_eq!(it.present_cash(), 0.);
         assert!((it.present_share(1) - 99.9 / nav).abs() < 1e-6);
@@ -626,12 +660,12 @@ mod test {
         let end_date = NaiveDate::parse_from_str("2024-01-22", "%Y-%m-%d").unwrap();
         let t = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
         let mut it = t.iter();
-        it.inflow(100.);
+        it.inflow(100.).unwrap();
         assert_eq!(
             it.today(),
             NaiveDate::parse_from_str("2024-01-02", "%Y-%m-%d").unwrap()
         );
-        it.buy(1, 100., 1.); // nav = 7562.02
+        it.buy(1, 100., 1.).unwrap(); // nav = 7562.02
         it.goto(NaiveDate::parse_from_str("2024-01-04", "%Y-%m-%d").unwrap());
         assert_eq!(
             it.today(),
@@ -645,7 +679,7 @@ mod test {
             it.today(),
             NaiveDate::parse_from_str("2024-01-15", "%Y-%m-%d").unwrap()
         );
-        it.sell(1, it.present_share(1), 1.); // nav = 7195.25
+        it.sell(1, it.present_share(1), 1.).unwrap(); // nav = 7195.25
         it.next_day();
         assert_eq!(it.present_cash(), it.present_asset());
         assert!(f64::abs(99. / 7562.02 * 7195.25 - 1. - it.present_asset()) < 1e-6);
@@ -665,10 +699,10 @@ mod test {
         let end_date = NaiveDate::parse_from_str("2024-01-22", "%Y-%m-%d").unwrap();
         let t = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
         let mut it = t.iter();
-        it.inflow(100.);
+        it.inflow(100.).unwrap();
         while let Some(_) = it.next_month(Some(28)) {
-            it.buy(1, 100., 0.1);
+            it.buy(1, 100., 0.1).unwrap();
         }
-        it.sell(1, it.present_share(1), 0.2);
+        it.sell(1, it.present_share(1), 0.2).unwrap();
     }
 }

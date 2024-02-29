@@ -49,9 +49,9 @@ fn aip(trans: &Transaction, day: u32) -> f64 {
     let mut inflow = 0.;
     while it.next_month(Some(day)).is_some() {
         inflow += 2000.;
-        it.inflow(2000.);
-        it.buy(0, 1000., 2.);
-        it.buy(1, 1000., 2.);
+        it.inflow(2000.).unwrap();
+        it.buy(0, 1000., 2.).unwrap();
+        it.buy(1, 1000., 2.).unwrap();
     }
     it.present_asset() / inflow
 }
@@ -59,9 +59,9 @@ fn aip(trans: &Transaction, day: u32) -> f64 {
 fn aip_rec(trans: &Transaction, day: u32) -> f64 {
     let mut it = trans.iter_rec();
     while it.next_month(Some(day)).is_some() {
-        it.inflow(2000.);
-        it.buy(0, 1000., 2.);
-        it.buy(1, 1000., 2.);
+        it.inflow(2000.).unwrap();
+        it.buy(0, 1000., 2.).unwrap();
+        it.buy(1, 1000., 2.).unwrap();
     }
     it.record().unwrap().irr_naive()
 }
