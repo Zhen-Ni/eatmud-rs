@@ -24,7 +24,7 @@ pub(crate) fn search_sorted<T, U: Ord>(
     key: impl Fn(&T) -> U,
     side: Option<SIDE>,
 ) -> usize {
-    if a.len() == 0 {
+    if a.is_empty() {
         return 0;
     }
     let side = side.unwrap_or(SIDE::LEFT);
