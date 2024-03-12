@@ -1,8 +1,7 @@
 use crate::DAYS_PER_YEAR;
 use crate::{TransactionIterator, Weekday};
 use chrono::Datelike;
-use ndarray::Array;
-use ndarray::{s, Array1};
+use ndarray::{s, Array, Array1, ArrayBase, Data, Ix1};
 
 #[derive(Debug)]
 pub struct KellyError(&'static str);
@@ -15,13 +14,13 @@ impl std::fmt::Display for KellyError {
 
 impl std::error::Error for KellyError {}
 
-pub fn kelly_weekly<'a>(
-    mut it: TransactionIterator<'a>,
+pub fn kelly_weekly(
+    it: &mut TransactionIterator,
     weekday: Weekday,
     ns: &[usize],
     inflations: &[f64],
     risk_bounds: &[f64],
-) -> Result<TransactionIterator<'a>, Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     if it.navs().shape()[0] < *ns.iter().max().unwrap() {
         return Err(Box::new(KellyError(
             "ns too large for transaction simulation",
@@ -33,64 +32,97 @@ pub fn kelly_weekly<'a>(
         let arr = arr.mapv(|x| (1. + inflations[i]).powf(x / DAYS_PER_YEAR));
         inflation_arrays.push(arr);
     }
+    let mut weekday_cache = it.date().iter().map(|d| d.weekday()).collect::<Vec<_>>();
+
     while it.next_weekday(Some(weekday)).is_some() {
+        weekday_cache.extend(it.date()[weekday_cache.len()..].iter().map(|d| d.weekday()));
         for j in 0..it.nfunds() {
-            let n = ns[j];
             let navs = it.navs();
             // Net assert value of the last n days.
-            let y0 = navs.slice(s![-(n as isize).., j as isize]);
-            // Net assert value considering inflation.
-            // y = y0 * (1 + inflation) ** number_of_years_to_today
+            let y0 = navs.slice(s![-(ns[j] as isize).., j as isize]);
+            // Net assert value considering inflation: y = y0 * (1 + inflation) ** number_of_years_to_today
             let y = &y0 * &inflation_arrays[j];
             // Get winning rate.
             let y_weekly = y
                 .iter()
-                .zip(it.date())
-                .filter(|(_yi, &di)| di.weekday() == weekday)
+                .zip(&weekday_cache[weekday_cache.len() - ns[j]..])
+                .filter(|(_yi, &di)| di == weekday)
                 .map(|(&yi, _di)| yi)
                 .collect::<Array1<_>>();
             let dy = &y_weekly.slice(s![1..]) - &y_weekly.slice(s![..-1]);
             let p = dy.iter().filter(|&&x| x > 0.).count() as f64 / dy.len() as f64;
-            // Kelly.
-            let y_max = *y
-                .iter()
-                .max_by(|&x, &y| f64::total_cmp(x, y))
-                .expect("fail to find maximal equivalent NAV");
-            let y_min = *y
-                .iter()
-                .min_by(|&x, &y| f64::total_cmp(x, y))
-                .expect("fail to find minimal equivalent NAV");
-            let b = y_max / y[y.len() - 1] - 1.;
-            let c = 1. - y_min / y[y.len() - 1];
-            let f = kelly_equation(p, b, c);
 
+            // Kelly.
+            let f = get_kelly_position(&y, p);
             // Risk control.
-            let y0_max = *y0
-                .iter()
-                .max_by(|&x, &y| f64::total_cmp(x, y))
-                .expect("fail to find maximal NAV");
-            let y0_min = *y0
-                .iter()
-                .min_by(|&x, &y| f64::total_cmp(x, y))
-                .expect("fail to find minimal NAV");
-            let bound_width = (y0_max - y0_min) * risk_bounds[j];
-            let f = if y0[y0.len() - 1] >= y0_max - bound_width {
-                1.
-            } else if y0[y0.len() - 1] <= y0_min + bound_width {
-                0.
-            } else {
-                f
-            };
+            let f = risk_control(f, &y0, risk_bounds[j]);
 
             // Adjust position
-            let total = it.present_asset() / it.nfunds() as f64;
-            let total = total * f;
+            let total = it.present_asset() / it.nfunds() as f64 * f;
             let current = it.present_fund_asset(j);
             let amount = total - current;
             it.buy_comment(j, amount, 0.0, &format!("position = {:.2}%", 100. * f))?;
         }
     }
-    Ok(it)
+    Ok(())
+}
+
+/// Calculate the position given by kelly startegy.
+///
+/// The expected income when win is estimated by the current position
+/// and the maximal net value in history. The expected loss is
+/// estimated by the current position and the minimal net value in
+/// history.
+///
+/// # Arguments
+///
+/// * `y` - The net assert values of the past.
+/// * `p` - Estimated winning rate.
+fn get_kelly_position<S: Data<Elem = f64>>(y: &ArrayBase<S, Ix1>, p: f64) -> f64 {
+    // fn get_kelly_position<T: IntoIterator + Sized>(y: &T, p: f64) -> f64 {
+    let y_max = *y
+        .iter()
+        .max_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find maximal NAV");
+    let y_min = *y
+        .iter()
+        .min_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find minimal NAV");
+    let current_y = *y.last().unwrap();
+    let b = y_max / current_y - 1.;
+    let c = 1. - y_min / current_y;
+    kelly_equation(p, b, c)
+}
+
+/// Adjust position to control risk.
+///
+/// A simple risk control strategy. If the current NAV is very low,
+/// adjust position to zero. If the current NAV is very high, adjust
+/// position to 1.0.
+///
+/// # Arguments
+///
+/// * `f` - The reference position.
+/// * `y` - The net assert values of the past.
+/// * `risk_bound` - The bound for controlling risk.
+fn risk_control<S: Data<Elem = f64>>(f: f64, y: &ArrayBase<S, Ix1>, risk_bound: f64) -> f64 {
+    let y_max = *y
+        .iter()
+        .max_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find maximal NAV");
+    let y_min = *y
+        .iter()
+        .min_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find minimal NAV");
+    let bound_width = (y_max - y_min) * risk_bound;
+    let current_y = *y.last().unwrap();
+    if current_y >= y_max - bound_width {
+        1.
+    } else if current_y <= y_min + bound_width {
+        0.
+    } else {
+        f
+    }
 }
 
 fn kelly_equation(p: f64, b: f64, c: f64) -> f64 {

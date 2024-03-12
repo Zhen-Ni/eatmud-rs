@@ -44,7 +44,7 @@ fn kelly(
     let mut it = trans.iter_rec();
     it.goto(start_date);
     it.inflow(1.0).unwrap();
-    let it = strategy::kelly_weekly(it, weekday, ns, inflations, risk_bounds).unwrap();
+    strategy::kelly_weekly(&mut it, weekday, ns, inflations, risk_bounds).unwrap();
     it.present_asset()
 }
 

@@ -11,12 +11,12 @@ impl std::fmt::Display for AIPError {
 
 impl std::error::Error for AIPError {}
 
-pub fn aip_monthly<'a>(
-    mut it: TransactionIterator<'a>,
+pub fn aip_monthly(
+    it: &mut TransactionIterator,
     day: u32,
     amounts: &[f64],
     fee_rates: &[f64],
-) -> Result<TransactionIterator<'a>, Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let total_amounts = amounts.iter().sum();
     while it.next_month(Some(day)).is_some() {
         it.inflow(total_amounts)?;
@@ -25,5 +25,5 @@ pub fn aip_monthly<'a>(
             it.buy(j, amount, amount * fee_rates[j])?;
         }
     }
-    Ok(it)
+    Ok(())
 }
