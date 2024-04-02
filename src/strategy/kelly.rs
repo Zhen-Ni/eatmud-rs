@@ -14,6 +14,86 @@ impl std::fmt::Display for KellyError {
 
 impl std::error::Error for KellyError {}
 
+pub struct KellyIndicator {
+    pub position: f64,
+    pub upper_bound: f64,
+    pub lower_bound: f64,
+    pub upper_risk_bound: f64,
+    pub lower_risk_bound: f64,
+}
+
+/// Get the position, upper and lower bounds using Kelly strategy.
+///
+/// This function provides a detailed inspect into the Kelly strategy
+/// during iteration. For a TransactionIterator object, giving the
+/// index of the selected fund and other parameters, it returns the
+/// current position, the limits where kelly strategy holds a position
+/// within 0% to 100% and the risk bounds.
+pub fn kelly_hint(
+    it: &TransactionIterator,
+    fund_index: usize,
+    weekday: Weekday,
+    n: usize,
+    inflation: f64,
+    risk_bound: f64,
+) -> Result<KellyIndicator, Box<dyn std::error::Error>> {
+    if it.navs().shape()[0] < n {
+        return Err(Box::new(KellyError("n too large for kelly strategy")));
+    }
+    let inflation_array = Array::linspace((n - 1) as f64, 0., n);
+    let inflation_array = inflation_array.mapv(|x| (1. + inflation).powf(x / DAYS_PER_YEAR));
+    let navs = it.navs();
+    // Net assert value of the last n days.
+    let y0 = navs.slice(s![-(n as isize).., fund_index as isize]);
+    let y = &y0 * &inflation_array;
+    // Get winning rate.
+    let y_weekly = y
+        .iter()
+        .zip(&it.date()[it.date().len() - n..])
+        .filter(|(_yi, &di)| di.weekday() == weekday)
+        .map(|(&yi, _di)| yi)
+        .collect::<Array1<_>>();
+    let dy = &y_weekly.slice(s![1..]) - &y_weekly.slice(s![..-1]);
+    let p = dy.iter().filter(|&&x| x > 0.).count() as f64 / dy.len() as f64;
+    let q = 1. - p;
+    // Kelly.
+    let position = get_kelly_position(&y, p);
+    // Risk control.
+    let position = risk_control(position, &y0, risk_bound);
+
+    let y_max = *y
+        .iter()
+        .max_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find maximal NAV");
+    let y_min = *y
+        .iter()
+        .min_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find minimal NAV");
+    let y0_max = *y0
+        .iter()
+        .max_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find maximal NAV");
+    let y0_min = *y0
+        .iter()
+        .min_by(|&x, &y| f64::total_cmp(x, y))
+        .expect("fail to find minimal NAV");
+    let upper_bound = y_max * p + y_min * q;
+    let lower_bound = y_max * y_min / (y_max * q + y_min * p);
+    let bound_width = (y0_max - y0_min) * risk_bound;
+    let upper_risk_bound = y0_max - bound_width;
+    let lower_risk_bound = y0_min + bound_width;
+
+    Ok(KellyIndicator {
+        position,
+        upper_bound,
+        lower_bound,
+        upper_risk_bound,
+        lower_risk_bound,
+    })
+}
+
+
+/// The Kelly strategy transacts weekly.
 pub fn kelly_weekly(
     it: &mut TransactionIterator,
     weekday: Weekday,
