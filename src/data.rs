@@ -1,4 +1,5 @@
 use encoding_rs;
+use std::error::Error;
 use std::io::BufRead;
 use std::ops::Index;
 use std::{fs, io};
@@ -168,20 +169,32 @@ impl From<&Stock> for Fund {
     }
 }
 
+#[derive(Debug)]
+pub struct ReadDataError(&'static str);
+
+impl std::fmt::Display for ReadDataError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "Read Data Error: {}", self.0)
+    }
+}
+
+impl std::error::Error for ReadDataError {}
+
 /// Read stock data from GuoTaiAn's txt output file.
-pub fn read_gta(path: &str) -> Option<Stock> {
-    let file = fs::File::open(path).ok()?;
+pub fn read_gta(path: &str) -> Result<Stock, Box<dyn Error>> {
+    let file = fs::File::open(path)?;
     let mut reader = io::BufReader::new(file);
 
     let mut buffer = Vec::<u8>::new();
-    reader.read_until(b'\n', &mut buffer).ok()?;
+    reader.read_until(b'\n', &mut buffer)?;
     let (results, _encoding, _error) = encoding_rs::GBK.decode(&buffer);
     let line = results.to_string();
     buffer.clear();
     let first_line = line.split_whitespace().collect::<Vec<&str>>();
     let [name, code] = first_line.as_slice() else {
-        // Wrong file format: cannot read header
-        return None;
+        return Err(Box::new(ReadDataError(
+            "Wrong file format: cannot parse header",
+        )));
     };
     let code = &code.to_string()[1..code.len() - 1];
     let mut stock = Data::<StockSlice>::new(name, code);
@@ -219,7 +232,7 @@ pub fn read_gta(path: &str) -> Option<Stock> {
             stock.append(date, open, high, low, close, volume);
         }
     }
-    Some(stock)
+    Ok(stock)
 }
 
 #[cfg(test)]
@@ -253,4 +266,3 @@ mod test {
         assert_eq!(stock[0].value(), 154.82);
     }
 }
-
