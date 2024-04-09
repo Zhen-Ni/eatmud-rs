@@ -131,7 +131,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_fund() {
+    fn test_search_sorted() {
         let a = vec![2, 4, 6, 8, 10, 12, 14, 16];
         let idx1 = search_sorted(&a, &9, |&x| x, None);
         let idx2 = search_sorted(&a, &9, |&x| x, Some(SIDE::RIGHT));
