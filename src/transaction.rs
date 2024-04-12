@@ -391,7 +391,7 @@ impl<'a> TransactionIterator<'a> {
         let income = share * self.transaction.navs[[self.index(), fundid]] - fee;
         self.iter_buffer.share[fundid] -= share;
         self.iter_buffer.cash += income;
-        self.iter_buffer.investment[fundid] += income;
+        self.iter_buffer.investment[fundid] -= income;
         Ok(self)
     }
 
