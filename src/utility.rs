@@ -119,7 +119,7 @@ pub(crate) fn newton1d(
     for _ in 0..maxiter {
         let new_x = x - f(x) / d(x);
         if (new_x - x).abs() < tol {
-            return Some(x);
+            return Some(new_x);
         }
         x = new_x;
     }
