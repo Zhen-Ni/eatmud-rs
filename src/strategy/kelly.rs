@@ -1,7 +1,7 @@
 use crate::DAYS_PER_YEAR;
 use crate::{TransactionIterator, Weekday};
 use chrono::Datelike;
-use ndarray::{s, Array, Array1, ArrayBase, Data, Ix1};
+use ndarray::{s, Array, Array1};
 
 #[derive(Debug)]
 pub struct KellyError(&'static str);
@@ -56,10 +56,6 @@ pub fn kelly_hint(
     let dy = &y_weekly.slice(s![1..]) - &y_weekly.slice(s![..-1]);
     let p = dy.iter().filter(|&&x| x > 0.).count() as f64 / dy.len() as f64;
     let q = 1. - p;
-    // Kelly.
-    let position = get_kelly_position(&y, p);
-    // Risk control.
-    let position = risk_control(position, &y0, risk_bound);
 
     let y_max = *y
         .iter()
@@ -77,6 +73,12 @@ pub fn kelly_hint(
         .iter()
         .min_by(|&x, &y| f64::total_cmp(x, y))
         .expect("fail to find minimal NAV");
+
+    // Kelly.
+    let position = get_kelly_position(*y.last().unwrap(), y_max, y_min, p);
+    // Risk control.
+    let position = risk_control(position, *y0.last().unwrap(), y0_max, y0_min, risk_bound);
+
     let upper_bound = y_max * p + y_min * q;
     let lower_bound = y_max * y_min / (y_max * q + y_min * p);
     let bound_width = (y0_max - y0_min) * risk_bound;
@@ -91,7 +93,6 @@ pub fn kelly_hint(
         lower_risk_bound,
     })
 }
-
 
 /// The Kelly strategy transacts weekly.
 pub fn kelly_weekly(
@@ -133,9 +134,28 @@ pub fn kelly_weekly(
             let p = dy.iter().filter(|&&x| x > 0.).count() as f64 / dy.len() as f64;
 
             // Kelly.
-            let f = get_kelly_position(&y, p);
+            let f = get_kelly_position(
+                *y.last().unwrap(),
+                *y.iter()
+                    .max_by(|&x, &y| f64::total_cmp(x, y))
+                    .expect("fail to find maximal NAV"),
+                *y.iter()
+                    .min_by(|&x, &y| f64::total_cmp(x, y))
+                    .expect("fail to find minimal NAV"),
+                p,
+            );
             // Risk control.
-            let f = risk_control(f, &y0, risk_bounds[j]);
+            let f = risk_control(
+                f,
+                *y0.last().unwrap(),
+                *y0.iter()
+                    .max_by(|&x, &y| f64::total_cmp(x, y))
+                    .expect("fail to find maximal NAV"),
+                *y0.iter()
+                    .min_by(|&x, &y| f64::total_cmp(x, y))
+                    .expect("fail to find minimal NAV"),
+                risk_bounds[j],
+            );
 
             // Adjust position
             let total = it.present_asset() / it.nfunds() as f64 * f;
@@ -158,19 +178,18 @@ pub fn kelly_weekly(
 ///
 /// * `y` - The net assert values of the past.
 /// * `p` - Estimated winning rate.
-fn get_kelly_position<S: Data<Elem = f64>>(y: &ArrayBase<S, Ix1>, p: f64) -> f64 {
-    // fn get_kelly_position<T: IntoIterator + Sized>(y: &T, p: f64) -> f64 {
-    let y_max = *y
-        .iter()
-        .max_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find maximal NAV");
-    let y_min = *y
-        .iter()
-        .min_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find minimal NAV");
-    let current_y = *y.last().unwrap();
-    let b = y_max / current_y - 1.;
-    let c = 1. - y_min / current_y;
+fn get_kelly_position(current_y: f64, max_y: f64, min_y: f64, p: f64) -> f64 {
+    // let y_max = *y
+    //     .iter()
+    //     .max_by(|&x, &y| f64::total_cmp(x, y))
+    //     .expect("fail to find maximal NAV");
+    // let y_min = *y
+    //     .iter()
+    //     .min_by(|&x, &y| f64::total_cmp(x, y))
+    //     .expect("fail to find minimal NAV");
+    // let current_y = *y.last().unwrap();
+    let b = max_y / current_y - 1.;
+    let c = 1. - min_y / current_y;
     kelly_equation(p, b, c)
 }
 
@@ -185,20 +204,20 @@ fn get_kelly_position<S: Data<Elem = f64>>(y: &ArrayBase<S, Ix1>, p: f64) -> f64
 /// * `f` - The reference position.
 /// * `y` - The net asset values of the past.
 /// * `risk_bound` - The bound for controlling risk.
-fn risk_control<S: Data<Elem = f64>>(f: f64, y: &ArrayBase<S, Ix1>, risk_bound: f64) -> f64 {
-    let y_max = *y
-        .iter()
-        .max_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find maximal NAV");
-    let y_min = *y
-        .iter()
-        .min_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find minimal NAV");
-    let bound_width = (y_max - y_min) * risk_bound;
-    let current_y = *y.last().unwrap();
-    if current_y >= y_max - bound_width {
+fn risk_control(f: f64, current_y: f64, max_y: f64, min_y: f64, risk_bound: f64) -> f64 {
+    // let y_max = *y
+    //     .iter()
+    //     .max_by(|&x, &y| f64::total_cmp(x, y))
+    //     .expect("fail to find maximal NAV");
+    // let y_min = *y
+    //     .iter()
+    //     .min_by(|&x, &y| f64::total_cmp(x, y))
+    //     .expect("fail to find minimal NAV");
+    let bound_width = (max_y - min_y) * risk_bound;
+    // let current_y = *y.last().unwrap();
+    if current_y >= max_y - bound_width {
         1.
-    } else if current_y <= y_min + bound_width {
+    } else if current_y <= min_y + bound_width {
         0.
     } else {
         f
