@@ -43,7 +43,7 @@ pub fn kelly_hint(
     let inflation_array = Array::linspace((n - 1) as f64, 0., n);
     let inflation_array = inflation_array.mapv(|x| (1. + inflation).powf(x / DAYS_PER_YEAR));
     let navs = it.navs();
-    // Net assert value of the last n days.
+    // Net asset value of the last n days.
     let y0 = navs.slice(s![-(n as isize).., fund_index as isize]);
     let y = &y0 * &inflation_array;
     // Get winning rate.
@@ -118,9 +118,9 @@ pub fn kelly_weekly(
         weekday_cache.extend(it.date()[weekday_cache.len()..].iter().map(|d| d.weekday()));
         for j in 0..it.nfunds() {
             let navs = it.navs();
-            // Net assert value of the last n days.
+            // Net asset value of the last n days.
             let y0 = navs.slice(s![-(ns[j] as isize).., j as isize]);
-            // Net assert value considering inflation: y = y0 * (1 + inflation) ** number_of_years_to_today
+            // Net asset value considering inflation: y = y0 * (1 + inflation) ** number_of_years_to_today
             let y = &y0 * &inflation_arrays[j];
             // Get winning rate.
             let y_weekly = y
@@ -183,7 +183,7 @@ fn get_kelly_position<S: Data<Elem = f64>>(y: &ArrayBase<S, Ix1>, p: f64) -> f64
 /// # Arguments
 ///
 /// * `f` - The reference position.
-/// * `y` - The net assert values of the past.
+/// * `y` - The net asset values of the past.
 /// * `risk_bound` - The bound for controlling risk.
 fn risk_control<S: Data<Elem = f64>>(f: f64, y: &ArrayBase<S, Ix1>, risk_bound: f64) -> f64 {
     let y_max = *y
