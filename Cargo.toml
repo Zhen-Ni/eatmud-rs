@@ -12,4 +12,4 @@ encoding_rs = "*"
 ndarray = "*"
 
 [lib]
-crate_type = ["lib"]
+crate-type = ["lib"]
