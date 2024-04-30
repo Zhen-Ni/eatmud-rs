@@ -76,21 +76,21 @@ pub(crate) fn search_sorted<T, U: Ord>(
 ///
 /// An gradient-based iteration method is used for solving internal
 /// rate of return (IRR). The IRR is represented as:
-///
+/// ```ignore
 ///     end_value = sum(investment_i * (1 + x) ** t_i)
-///
+/// ```
 /// where investment_i is the items in `investment` and `t_i` is the
 /// duration of the date of `investment_i` to `end_value` in years,
 /// and `x` is the IRR value to be solved. `x` is in the interval of
 /// (-1, +∞), its initial value is given by `x0`. To make the solution
 /// always in this interval, let `x = exp(p) - 1`, thus p ∈ (-∞, ∞):
-///
+/// ```ignore
 ///     end_value = sum(investment_i * exp(p * t_i))
-///
+/// ```
 /// and its derivation is:
-///
+/// ```ignore
 ///     d(end_value) / d(p) = sum(investment_i * t_i * exp(p * t_i))
-///
+/// ```
 pub(crate) fn irr(
     days_array: &[f64],
     investment_array: &[f64],

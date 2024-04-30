@@ -291,7 +291,6 @@ mod test {
             .unwrap();
             result.push(it.asset());
         }
-
         assert!((result[0] - 1.538617807495912).abs() < 1e-6);
         assert!((result[1] - 1.6655186489198273).abs() < 1e-6);
         assert!((result[2] - 1.5012221777553958).abs() < 1e-6);

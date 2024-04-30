@@ -61,7 +61,7 @@ impl<Ds: DataSlice> Data<Ds> {
     ///
     /// # Examples
     /// ```
-    /// use eatmud::Fund;
+    /// # use eatmud::Fund;
     /// let mut fund = Fund::new("hs300", "123456");
     /// assert!(fund.name() == "hs300");
     /// assert!(fund.code() == "123456");
@@ -98,8 +98,8 @@ impl Data<FundSlice> {
     ///
     /// # Examples
     /// ```
-    /// use chrono::NaiveDate;
-    /// use eatmud::Fund;
+    /// # use chrono::NaiveDate;
+    /// # use eatmud::Fund;
     /// let mut fund = Fund::new("hs300", "123456");
     /// let date = NaiveDate::parse_from_str("2024-01-01", "%Y-%m-%d")
     ///     .unwrap();
@@ -117,9 +117,9 @@ impl Data<StockSlice> {
     ///
     /// # Examples
     /// ```
-    /// use chrono::NaiveDate;
-    /// use eatmud::prelude::*;
-    /// use eatmud::Stock;
+    /// # use chrono::NaiveDate;
+    /// # use eatmud::prelude::*;
+    /// # use eatmud::Stock;
     /// let mut stock = Stock::new("hs300", "123456");
     /// let date = NaiveDate::parse_from_str("2024-01-01", "%Y-%m-%d")
     ///     .unwrap();
