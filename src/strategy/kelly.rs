@@ -49,7 +49,7 @@ pub fn kelly_hint(
     // Get winning rate.
     let y_weekly = y
         .iter()
-        .zip(&it.date()[it.date().len() - n..])
+        .zip(&it.dates()[it.ndays() - n..])
         .filter(|(_yi, &di)| di.weekday() == weekday)
         .map(|(&yi, _di)| yi)
         .collect::<Array1<_>>();
@@ -113,10 +113,14 @@ pub fn kelly_weekly(
         let arr = arr.mapv(|x| (1. + inflations[i]).powf(x / DAYS_PER_YEAR));
         inflation_arrays.push(arr);
     }
-    let mut weekday_cache = it.date().iter().map(|d| d.weekday()).collect::<Vec<_>>();
+    let mut weekday_cache = it.dates().iter().map(|d| d.weekday()).collect::<Vec<_>>();
 
     while it.next_weekday(Some(weekday)).is_some() {
-        weekday_cache.extend(it.date()[weekday_cache.len()..].iter().map(|d| d.weekday()));
+        weekday_cache.extend(
+            it.dates()[weekday_cache.len()..]
+                .iter()
+                .map(|d| d.weekday()),
+        );
         for j in 0..it.nfunds() {
             let navs = it.navs();
             // Net asset value of the last n days.
@@ -158,8 +162,8 @@ pub fn kelly_weekly(
             );
 
             // Adjust position
-            let total = it.present_asset() / it.nfunds() as f64 * f;
-            let current = it.present_fund_asset(j);
+            let total = it.asset() / it.nfunds() as f64 * f;
+            let current = it.fund_asset(j);
             let amount = total - current;
             it.buy_comment(j, amount, 0.0, &format!("position = {:.2}%", 100. * f))?;
         }
@@ -179,15 +183,6 @@ pub fn kelly_weekly(
 /// * `y` - The net assert values of the past.
 /// * `p` - Estimated winning rate.
 fn get_kelly_position(current_y: f64, max_y: f64, min_y: f64, p: f64) -> f64 {
-    // let y_max = *y
-    //     .iter()
-    //     .max_by(|&x, &y| f64::total_cmp(x, y))
-    //     .expect("fail to find maximal NAV");
-    // let y_min = *y
-    //     .iter()
-    //     .min_by(|&x, &y| f64::total_cmp(x, y))
-    //     .expect("fail to find minimal NAV");
-    // let current_y = *y.last().unwrap();
     let b = max_y / current_y - 1.;
     let c = 1. - min_y / current_y;
     kelly_equation(p, b, c)
@@ -205,14 +200,6 @@ fn get_kelly_position(current_y: f64, max_y: f64, min_y: f64, p: f64) -> f64 {
 /// * `y` - The net asset values of the past.
 /// * `risk_bound` - The bound for controlling risk.
 fn risk_control(f: f64, current_y: f64, max_y: f64, min_y: f64, risk_bound: f64) -> f64 {
-    // let y_max = *y
-    //     .iter()
-    //     .max_by(|&x, &y| f64::total_cmp(x, y))
-    //     .expect("fail to find maximal NAV");
-    // let y_min = *y
-    //     .iter()
-    //     .min_by(|&x, &y| f64::total_cmp(x, y))
-    //     .expect("fail to find minimal NAV");
     let bound_width = (max_y - min_y) * risk_bound;
     // let current_y = *y.last().unwrap();
     if current_y >= max_y - bound_width {
@@ -233,11 +220,82 @@ fn kelly_equation(p: f64, b: f64, c: f64) -> f64 {
     } else {
         (b * p - c * q) / (b * c)
     };
-    if f > 1. {
-        1.
-    } else if f < 0. {
-        0.
-    } else {
-        f
+    f.clamp(0., 1.)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::*;
+
+    #[test]
+    fn test_kelly_1() {
+        let hs300 = Fund::from(&read_gta("hs300.txt").unwrap());
+        let gz2000 = Fund::from(&read_gta("gz2000.txt").unwrap());
+        let start_date = NaiveDate::parse_from_str("20170101", "%Y%m%d").unwrap();
+        let end_date = NaiveDate::parse_from_str("20240101", "%Y%m%d").unwrap();
+        let trans = Transaction::new(&[&hs300, &gz2000], None, Some(end_date));
+
+        let ns = [1300, 1600];
+        let inflations = [0.015, 0.015];
+        let risk_bounds = [0.01, 0.01];
+        let mut results = Vec::new();
+        for save_log in [true, false] {
+            for save_record in [true, false] {
+                let mut res = Vec::new();
+                for weekday in 0..5 {
+                    let mut it = trans.iter(save_log, save_record);
+                    it.goto(start_date);
+                    it.inflow(1.).unwrap();
+                    kelly_weekly(
+                        &mut it,
+                        Weekday::try_from(weekday).unwrap(),
+                        &ns,
+                        &inflations,
+                        &risk_bounds,
+                    )
+                    .unwrap();
+                    res.push(it.asset());
+                }
+                results.push(res);
+            }
+        }
+        assert_eq!(results[0], results[1]);
+        assert_eq!(results[0], results[2]);
+        assert_eq!(results[0], results[3]);
+    }
+
+    #[test]
+    fn test_kelly_2() {
+        let hs300 = Fund::from(&read_gta("hs300.txt").unwrap());
+        let gz2000 = Fund::from(&read_gta("gz2000.txt").unwrap());
+        let start_date = NaiveDate::parse_from_str("20170101", "%Y%m%d").unwrap();
+        let end_date = NaiveDate::parse_from_str("20240101", "%Y%m%d").unwrap();
+        let trans = Transaction::new(&[&hs300, &gz2000], None, Some(end_date));
+
+        let ns = [1300, 1600];
+        let inflations = [0.015, 0.015];
+        let risk_bounds = [0.01, 0.01];
+        let mut result = Vec::new();
+        for weekday in 0..5 {
+            let mut it = trans.iter(false, false);
+            it.goto(start_date);
+            it.inflow(1.).unwrap();
+            kelly_weekly(
+                &mut it,
+                Weekday::try_from(weekday).unwrap(),
+                &ns,
+                &inflations,
+                &risk_bounds,
+            )
+            .unwrap();
+            result.push(it.asset());
+        }
+
+        assert!((result[0] - 1.538617807495912).abs() < 1e-6);
+        assert!((result[1] - 1.6655186489198273).abs() < 1e-6);
+        assert!((result[2] - 1.5012221777553958).abs() < 1e-6);
+        assert!((result[3] - 1.489728842992303).abs() < 1e-6);
+        assert!((result[4] - 1.3982690518133718).abs() < 1e-6);
     }
 }

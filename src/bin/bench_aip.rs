@@ -5,62 +5,38 @@ use std::time::Instant;
 use chrono::NaiveDate;
 use eatmud::{read_gta, Fund, Transaction};
 
-fn bench_aip(start_date: &str, end_date: &str) {
-    let hs300 = Fund::from(&read_gta("hs300.txt").unwrap());
-    let gz2000 = Fund::from(&read_gta("gz2000.txt").unwrap());
-    let start_date = NaiveDate::parse_from_str(start_date, "%Y-%m-%d").unwrap();
-    let end_date = NaiveDate::parse_from_str(end_date, "%Y-%m-%d").unwrap();
-    let trans = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
-
-    let now = Instant::now();
-    let mut res: Vec<f64> = Vec::new();
-    for i in 1..29 {
-        let resi = aip(&trans, i);
-        res.push(resi);
+fn bench_aip(trans: &Transaction) -> Vec<Vec<f64>> {
+    let mut results = Vec::new();
+    for save_log in [true, false] {
+        for save_record in [true, false] {
+            let name = format!("save_log={}, save_record={}", save_log, save_record);
+            let now = Instant::now();
+            let mut res = Vec::new();
+            for day in 1..29 {
+                let mut it = trans.iter(save_log, save_record);
+                eatmud::strategy::aip_monthly(&mut it, day, &[1000., 1000.], &[0., 0.]).unwrap();
+                res.push(it.asset());
+            }
+            let total_time = Instant::now() - now;
+            println!(
+                "running aip({}) took {} milli seconds",
+                name,
+                total_time.as_micros() as f64 / 1000.
+            );
+            results.push(res);
+        }
     }
-    let elapsed_time = now.elapsed();
-    println!(
-        "Running aip took {} micro seconds.",
-        elapsed_time.as_micros()
-    );
-    println!("{:?}", res);
-
-    let now = Instant::now();
-    let mut res = Vec::new();
-    for i in 1..29 {
-        let resi = aip_rec(&trans, i);
-        res.push(resi);
-    }
-    let elapsed_time = now.elapsed();
-    println!(
-        "Running aip_rec took {} micro seconds.",
-        elapsed_time.as_micros()
-    );
-    println!("{:?}", res);
-}
-
-fn aip(trans: &Transaction, day: u32) -> f64 {
-    let mut it = trans.iter();
-    let mut inflow = 0.;
-    while it.next_month(Some(day)).is_some() {
-        inflow += 2000.;
-        it.inflow(2000.).unwrap();
-        it.buy(0, 1000., 2.).unwrap();
-        it.buy(1, 1000., 2.).unwrap();
-    }
-    it.present_asset() / inflow
-}
-
-fn aip_rec(trans: &Transaction, day: u32) -> f64 {
-    let mut it = trans.iter_rec();
-    while it.next_month(Some(day)).is_some() {
-        it.inflow(2000.).unwrap();
-        it.buy(0, 1000., 2.).unwrap();
-        it.buy(1, 1000., 2.).unwrap();
-    }
-    it.record().unwrap().irr_naive()
+    results
 }
 
 fn main() {
-    bench_aip("2011-01-01", "2024-01-01");
+    let hs300 = Fund::from(&read_gta("hs300.txt").unwrap());
+    let gz2000 = Fund::from(&read_gta("gz2000.txt").unwrap());
+    let start_date = NaiveDate::parse_from_str("20110101", "%Y%m%d").unwrap();
+    let end_date = NaiveDate::parse_from_str("20240101", "%Y%m%d").unwrap();
+    let trans = Transaction::new(&[&hs300, &gz2000], Some(start_date), Some(end_date));
+    let results = bench_aip(&trans);
+    assert_eq!(results[0], results[1]);
+    assert_eq!(results[0], results[2]);
+    assert_eq!(results[0], results[3]);
 }
