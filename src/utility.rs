@@ -72,28 +72,66 @@ pub(crate) fn search_sorted<T, U: Ord>(
     }
 }
 
+/// Calaulate internal rate of return.
+///
+/// An gradient-based iteration method is used for solving internal
+/// rate of return (IRR). The IRR is represented as:
+///
+///     end_value = sum(investment_i * (1 + x) ** t_i)
+///
+/// where investment_i is the items in `investment` and `t_i` is the
+/// duration of the date of `investment_i` to `end_value` in years,
+/// and `x` is the IRR value to be solved. `x` is in the interval of
+/// (-1, +∞), its initial value is given by `x0`. To make the solution
+/// always in this interval, let `x = exp(p) - 1`, thus p ∈ (-∞, ∞):
+///
+///     end_value = sum(investment_i * exp(p * t_i))
+///
+/// and its derivation is:
+///
+///     d(end_value) / d(p) = sum(investment_i * t_i * exp(p * t_i))
+///
 pub(crate) fn irr(
     days_array: &[f64],
     investment_array: &[f64],
     end_value: f64,
     x0: f64,
 ) -> Option<f64> {
+    // Avoid sigularity.
+    let mut all_zeros = true;
+    for i in investment_array {
+        if *i != 0. {
+            all_zeros = false;
+            break;
+        }
+    }
+    if all_zeros {
+        return None;
+    }
+
+    let t_list = days_array
+        .iter()
+        .map(|x| x / DAYS_PER_YEAR)
+        .collect::<Vec<_>>();
+
     let f = |p: f64| -> f64 {
         end_value
-            - days_array
+            - t_list
                 .iter()
                 .zip(investment_array)
-                .map(|(&t, &x)| x * f64::powf(1. + p, t / DAYS_PER_YEAR))
+                .map(|(&t, &x)| x * f64::exp(p * t))
                 .sum::<f64>()
     };
     let g = |p: f64| {
-        days_array
+        t_list
             .iter()
             .zip(investment_array)
-            .map(|(&t, &x)| -x * t / DAYS_PER_YEAR * f64::powf(1. + p, t / DAYS_PER_YEAR - 1.))
+            .map(|(&t, &x)| -x * t * f64::exp(p * t))
             .sum()
     };
-    newton1d(f, g, x0, 1e-6, 1000)
+    let p0 = f64::ln(x0 + 1.);
+    let p = newton1d(f, g, p0, 1e-6, 1000)?;
+    Some(f64::exp(p) - 1.)
 }
 
 /// Find root of function using Newton's method.
