@@ -28,7 +28,7 @@ fn bench_kelly(trans: &Transaction, start_date: NaiveDate) -> Vec<Vec<f64>> {
             }
             let total_time = Instant::now() - now;
             println!(
-                "running aip({}) took {} milli seconds",
+                "running kelly({}) took {} milli seconds",
                 name,
                 total_time.as_micros() as f64 / 1000.
             );

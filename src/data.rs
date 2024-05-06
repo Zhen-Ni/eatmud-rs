@@ -206,31 +206,46 @@ pub fn read_gta(path: &str) -> Result<Stock, Box<dyn Error>> {
         let (results, _encoding, _error) = encoding_rs::GBK.decode(&buffer);
         let line = results.to_string();
         buffer.clear();
-        let words = line.split_whitespace().collect::<Vec<&str>>();
-        if words.len() < 6 {
+
+        let mut iter_words = line.split_whitespace();
+        let Some(date) = iter_words.next() else {
             continue;
-        }
-        if let [date, open, high, low, close, volume] = words.as_slice()[..6] {
-            let Ok(date): Result<NaiveDate, _> = NaiveDate::parse_from_str(date, "%Y/%m/%d") else {
-                continue;
-            };
-            let Ok(open): Result<f64, _> = open.parse() else {
-                continue;
-            };
-            let Ok(high): Result<f64, _> = high.parse() else {
-                continue;
-            };
-            let Ok(low): Result<f64, _> = low.parse() else {
-                continue;
-            };
-            let Ok(close): Result<f64, _> = close.parse() else {
-                continue;
-            };
-            let Ok(volume): Result<f64, _> = volume.parse() else {
-                continue;
-            };
-            stock.append(date, open, high, low, close, volume);
-        }
+        };
+        let Some(open) = iter_words.next() else {
+            continue;
+        };
+        let Some(high) = iter_words.next() else {
+            continue;
+        };
+        let Some(low) = iter_words.next() else {
+            continue;
+        };
+        let Some(close) = iter_words.next() else {
+            continue;
+        };
+        let Some(volume) = iter_words.next() else {
+            continue;
+        };
+
+        let Ok(date): Result<NaiveDate, _> = NaiveDate::parse_from_str(date, "%Y/%m/%d") else {
+            continue;
+        };
+        let Ok(open): Result<f64, _> = open.parse() else {
+            continue;
+        };
+        let Ok(high): Result<f64, _> = high.parse() else {
+            continue;
+        };
+        let Ok(low): Result<f64, _> = low.parse() else {
+            continue;
+        };
+        let Ok(close): Result<f64, _> = close.parse() else {
+            continue;
+        };
+        let Ok(volume): Result<f64, _> = volume.parse() else {
+            continue;
+        };
+        stock.append(date, open, high, low, close, volume);
     }
     Ok(stock)
 }

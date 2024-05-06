@@ -12,6 +12,42 @@ impl std::fmt::Display for KellyError {
     }
 }
 
+/// Find maximal and minimal values in an iterable container simutanuously.
+///
+/// The original code may look like (ignore NAN):
+/// ```ignore
+/// let max = *iterable
+///     .iter()
+///     .max_by(|&x, &y| f64::partial_cmp(x, y).unwrap())
+///     .unwrap();
+/// let min = *iterable
+///     .iter()
+///     .min_by(|&x, &y| f64::partial_cmp(x, y).unwrap())
+///     .unwrap();
+/// ```
+/// Now it can be replaced as:
+/// ```ignore
+/// let (max, min) = maxmin!(y);
+/// ```
+macro_rules! maxmin {
+    ($iterable: ident) => {{
+        let mut it = $iterable.iter();
+        let mut max = *it
+            .next()
+            .expect("fail to find max and min as array is empty");
+        let mut min = max;
+        while let Some(&v) = it.next() {
+            if max < v {
+                max = v;
+            }
+            if v < min {
+                min = v;
+            }
+        }
+        (max, min)
+    }};
+}
+
 impl std::error::Error for KellyError {}
 
 pub struct KellyIndicator {
@@ -56,23 +92,8 @@ pub fn kelly_hint(
     let dy = &y_weekly.slice(s![1..]) - &y_weekly.slice(s![..-1]);
     let p = dy.iter().filter(|&&x| x > 0.).count() as f64 / dy.len() as f64;
     let q = 1. - p;
-
-    let y_max = *y
-        .iter()
-        .max_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find maximal NAV");
-    let y_min = *y
-        .iter()
-        .min_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find minimal NAV");
-    let y0_max = *y0
-        .iter()
-        .max_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find maximal NAV");
-    let y0_min = *y0
-        .iter()
-        .min_by(|&x, &y| f64::total_cmp(x, y))
-        .expect("fail to find minimal NAV");
+    let (y_max, y_min) = maxmin!(y);
+    let (y0_max, y0_min) = maxmin!(y0);
 
     // Kelly.
     let position = get_kelly_position(*y.last().unwrap(), y_max, y_min, p);
@@ -137,29 +158,12 @@ pub fn kelly_weekly(
             let dy = &y_weekly.slice(s![1..]) - &y_weekly.slice(s![..-1]);
             let p = dy.iter().filter(|&&x| x > 0.).count() as f64 / dy.len() as f64;
 
+            let (y_max, y_min) = maxmin!(y);
+            let (y0_max, y0_min) = maxmin!(y0);
             // Kelly.
-            let f = get_kelly_position(
-                *y.last().unwrap(),
-                *y.iter()
-                    .max_by(|&x, &y| f64::total_cmp(x, y))
-                    .expect("fail to find maximal NAV"),
-                *y.iter()
-                    .min_by(|&x, &y| f64::total_cmp(x, y))
-                    .expect("fail to find minimal NAV"),
-                p,
-            );
+            let f = get_kelly_position(*y.last().unwrap(), y_max, y_min, p);
             // Risk control.
-            let f = risk_control(
-                f,
-                *y0.last().unwrap(),
-                *y0.iter()
-                    .max_by(|&x, &y| f64::total_cmp(x, y))
-                    .expect("fail to find maximal NAV"),
-                *y0.iter()
-                    .min_by(|&x, &y| f64::total_cmp(x, y))
-                    .expect("fail to find minimal NAV"),
-                risk_bounds[j],
-            );
+            let f = risk_control(f, *y0.last().unwrap(), y0_max, y0_min, risk_bounds[j]);
 
             // Adjust position
             let total = it.asset() / it.nfunds() as f64 * f;

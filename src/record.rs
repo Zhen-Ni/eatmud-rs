@@ -291,8 +291,10 @@ impl Record<ConciseRecordSlice> {
         if !self.is_empty() && date < self[self.len() - 1].date() {
             panic!("date must be ordered");
         }
-        let total_investment =
-            self.records.iter().map(|rs| rs.investment).sum::<f64>() + investment;
+        let mut total_investment = investment;
+        if !self.is_empty() {
+            total_investment += self.records[self.len() - 1].total_investment();
+        }
         self.records.push(ConciseRecordSlice {
             date,
             investment,
@@ -331,9 +333,12 @@ impl Record<DetailedRecordSlice> {
         if !self.is_empty() && date < self[self.len() - 1].date() {
             panic!("date must be ordered");
         }
-        let total_investment =
-            self.records.iter().map(|rs| rs.investment).sum::<f64>() + investment;
-        let total_share = self.records.iter().map(|rs| rs.share).sum::<f64>() + share;
+        let mut total_investment = investment;
+        let mut total_share = share;
+        if !self.is_empty() {
+            total_investment += self.records[self.len() - 1].total_investment();
+            total_share += self.records[self.len() - 1].total_share();
+        }
         let present_value = nav * total_share;
         self.records.push(DetailedRecordSlice {
             date,
